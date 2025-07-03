@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const { setToken } = useAuthStore();
 
   const handleLogin = () => {
@@ -31,6 +32,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Enter your email"
+              data-testid="email-input"
             />
           </div>
           <div className="space-y-2">
@@ -41,9 +43,15 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
+              data-testid="password-input"
             />
           </div>
-          <Button onClick={handleLogin} className="w-full">
+          {error && (
+            <div className="text-red-600 text-sm" data-testid="login-error-message">
+              {error}
+            </div>
+          )}
+          <Button onClick={handleLogin} className="w-full" data-testid="login-button">
             Login
           </Button>
         </CardContent>
