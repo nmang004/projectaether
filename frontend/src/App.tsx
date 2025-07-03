@@ -1,21 +1,50 @@
-import { Routes, Route } from 'react-router-dom'
-import { Toaster } from './components/ui/toaster'
-import Layout from './components/layout/Layout'
-import HomePage from './pages/HomePage'
-import NotFoundPage from './pages/NotFoundPage'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { Toaster } from './components/ui/toaster';
+import { AppLayout } from './components/layout/AppLayout';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import DashboardPage from './pages/DashboardPage';
+import SiteAuditPage from './pages/SiteAuditPage';
+import KeywordClusteringPage from './pages/KeywordClusteringPage';
+import LoginPage from './pages/LoginPage';
+
+const router = createBrowserRouter([
+  {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
+    path: '/',
+    element: <ProtectedRoute />,
+    children: [
+      {
+        path: '',
+        element: <AppLayout />,
+        children: [
+          {
+            index: true,
+            element: <DashboardPage />,
+          },
+          {
+            path: 'site-audit',
+            element: <SiteAuditPage />,
+          },
+          {
+            path: 'keyword-clustering',
+            element: <KeywordClusteringPage />,
+          },
+        ],
+      },
+    ],
+  },
+]);
 
 function App() {
   return (
     <>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<HomePage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
+      <RouterProvider router={router} />
       <Toaster />
     </>
-  )
+  );
 }
 
 export default App
