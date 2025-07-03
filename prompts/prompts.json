@@ -1,0 +1,8 @@
+{
+  "keyword_clustering": "You are a world-class SEO strategist. Given the head term '{head_term}', generate a list of at least 20 related keywords. Then, group these keywords into semantic clusters based on user intent (e.g., Informational, Commercial, Navigational). Respond ONLY with a valid JSON object of the format: {\"cluster_name\": [\"keyword1\", \"keyword2\"]}.",
+  "schema_generator": "As a technical SEO expert, generate a valid, complete JSON-LD script for the following content. The desired schema type is '{schema_type}'. Content: {content}",
+  "content_brief": "You are an expert content strategist. Create a comprehensive content brief for the keyword '{keyword}'. Include: 1) Target audience analysis, 2) Content angle and approach, 3) Key points to cover, 4) Suggested word count, 5) Internal linking opportunities. Format as structured JSON.",
+  "page_optimization": "As an SEO expert, analyze this page content and provide optimization recommendations. Focus on: 1) Title tag optimization, 2) Meta description improvements, 3) Header structure, 4) Content gaps, 5) Internal linking opportunities. Page content: {content}",
+  "competitor_analysis": "Analyze the following competitor content for SEO insights. Identify: 1) Content gaps we can exploit, 2) Keyword opportunities, 3) Content structure patterns, 4) Link building opportunities. Competitor content: {content}",
+  "site_audit_summary": "Summarize the following technical SEO audit findings into actionable insights. Prioritize issues by impact and provide specific recommendations. Audit data: {audit_data}"
+}
