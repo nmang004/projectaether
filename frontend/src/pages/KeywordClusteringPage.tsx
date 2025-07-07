@@ -40,69 +40,84 @@ export default function KeywordClusteringPage() {
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <PageHeader title="AI-Powered Keyword & Clustering Engine" />
+    <div className="container mx-auto p-8 space-y-8 animate-slide-up">
+      <div className="text-center space-y-4">
+        <h1 className="text-4xl font-bold gradient-text font-inter tracking-tight">
+          AI-Powered Keyword & Clustering Engine
+        </h1>
+        <p className="text-lg text-text-secondary font-inter max-w-2xl mx-auto">
+          Enter a head term to generate semantically related keyword clusters using advanced AI
+        </p>
+      </div>
       
-      <section className="mb-8">
-        <div className="max-w-md space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="head-term">Head Term</Label>
+      <section className="max-w-2xl mx-auto">
+        <div className="glassmorphism p-8 space-y-6">
+          <div className="space-y-3">
+            <Label htmlFor="head-term">Enter Keywords</Label>
             <Input
               id="head-term"
               value={headTerm}
               onChange={(e) => setHeadTerm(e.target.value)}
-              placeholder="e.g., content marketing"
+              placeholder="Enter keywords separated by commas or new lines"
               className="w-full"
             />
+            <p className="text-sm text-text-secondary font-inter">
+              Separate multiple keywords with commas or new lines
+            </p>
           </div>
           <Button 
             onClick={handleGenerate}
             disabled={!headTerm.trim() || generateClusters.isPending}
             className="w-full"
+            size="lg"
           >
-            {generateClusters.isPending ? "Generating..." : "Generate Clusters"}
+            {generateClusters.isPending ? "🔄 Generating..." : "✨ Generate Clusters"}
           </Button>
         </div>
       </section>
 
       {generateClusters.isError && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-red-700">
-            Error generating clusters: {generateClusters.error?.message}
-          </p>
-        </div>
+        <section className="max-w-2xl mx-auto">
+          <div className="glassmorphism p-6 border-red-200 bg-red-50/70">
+            <h3 className="text-lg font-semibold text-red-700 mb-2 font-inter">Error</h3>
+            <p className="text-red-600 font-inter">
+              Error generating clusters: {generateClusters.error?.message}
+            </p>
+          </div>
+        </section>
       )}
 
       {generateClusters.data?.clusters && generateClusters.data.clusters.length > 0 && (
-        <section>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Keyword Clusters</h2>
-            <Button onClick={handleExportCSV} variant="outline">
-              Export to CSV
+        <section className="max-w-4xl mx-auto space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-3xl font-bold text-text-primary font-inter">Keyword Clusters</h2>
+            <Button onClick={handleExportCSV} variant="outline" size="lg">
+              📊 Export to CSV
             </Button>
           </div>
           
-          <Accordion type="single" collapsible className="w-full">
+          <div className="grid gap-6">
             {generateClusters.data.clusters.map((cluster, index) => (
-              <AccordionItem key={index} value={index.toString()}>
-                <AccordionTrigger className="text-left">
-                  <span className="font-medium">{cluster.cluster_name}</span>
-                  <span className="text-sm text-muted-foreground ml-2">
-                    ({cluster.keywords.length} keywords)
+              <div key={index} className="glassmorphism p-6 hover-lift animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-text-primary font-inter">{cluster.cluster_name}</h3>
+                  <span className="bg-accent text-white px-3 py-1 rounded-full text-sm font-medium">
+                    {cluster.keywords.length} keywords
                   </span>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <ul className="space-y-1 pl-4">
-                    {cluster.keywords.map((keyword, keywordIndex) => (
-                      <li key={keywordIndex} className="text-sm">
-                        • {keyword}
-                      </li>
-                    ))}
-                  </ul>
-                </AccordionContent>
-              </AccordionItem>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {cluster.keywords.map((keyword, keywordIndex) => (
+                    <span 
+                      key={keywordIndex} 
+                      className="bg-secondary-action text-text-primary px-3 py-1 rounded-lg text-sm font-medium border border-secondary-border hover:shadow-soft transition-all duration-200"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ))}
-          </Accordion>
+          </div>
         </section>
       )}
     </div>

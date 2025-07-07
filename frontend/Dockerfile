@@ -18,8 +18,8 @@ RUN npm install --no-audit --no-fund
 # Copy source code (excluding files in .dockerignore)
 COPY . .
 
-# Set production environment variable for build
-ENV VITE_API_URL=https://project-aether-staging-api-271865958975.us-central1.run.app/api/v1
+# Set API URL for production frontend
+ENV VITE_API_URL=https://project-aether-prod-api-271865958975.us-central1.run.app/api/v1
 
 # Build the React application for production
 RUN npm run build:docker
@@ -40,7 +40,7 @@ RUN adduser -S -D -H -u 1001 -h /var/cache/nginx -s /sbin/nologin -G nginx -g ng
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/nginx.conf /etc/nginx/nginx.conf
 
 # Set proper permissions for nginx files
 RUN chown -R nginx:nginx /usr/share/nginx/html && \

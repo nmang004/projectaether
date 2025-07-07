@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,12 +9,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error] = useState('');
+  const navigate = useNavigate();
   const { setToken } = useAuthStore();
 
   const handleLogin = () => {
-    // Mock JWT token for testing
-    const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZXhwIjoxNzM4NzE5NjAwfQ.mock_signature';
+    // Mock JWT token for testing - expires July 7, 2026
+    const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiZXhwIjoxNzgzNDU3Nzc0fQ.mock_signature';
+    console.log('🔐 Attempting login with mock token');
     setToken(mockToken);
+    
+    // Navigate to dashboard after successful login
+    console.log('🧭 Navigating to dashboard');
+    navigate('/', { replace: true });
   };
 
   return (

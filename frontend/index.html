@@ -5,9 +5,49 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Project Aether - SEO Intelligence Platform</title>
+    
+    <!-- Inter Font Family -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="padding: 20px; font-family: Arial, sans-serif; text-align: center;">
+        <h2>🚀 Project Aether Loading...</h2>
+        <p>If this message persists, check the browser console for errors.</p>
+        <div id="debug-info" style="margin-top: 20px; font-size: 12px; color: #666;">
+          <p>Loading React application...</p>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      // Debug script that runs before React
+      console.log('🔧 HTML loaded, about to load React...');
+      
+      window.addEventListener('error', function(e) {
+        console.error('❌ JavaScript Error:', e.error, e.filename, e.lineno);
+        document.getElementById('debug-info').innerHTML = 
+          '<p style="color: red;">JavaScript Error: ' + e.error + '</p>';
+      });
+      
+      window.addEventListener('unhandledrejection', function(e) {
+        console.error('❌ Promise Rejection:', e.reason);
+        document.getElementById('debug-info').innerHTML = 
+          '<p style="color: red;">Promise Error: ' + e.reason + '</p>';
+      });
+      
+      // Check if React loaded after 5 seconds
+      setTimeout(function() {
+        if (document.getElementById('root').innerHTML.includes('Loading React')) {
+          console.error('❌ React failed to mount after 5 seconds');
+          document.getElementById('debug-info').innerHTML = 
+            '<p style="color: red;">React failed to mount. Check console for errors.</p>';
+        }
+      }, 5000);
+    </script>
+    
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
