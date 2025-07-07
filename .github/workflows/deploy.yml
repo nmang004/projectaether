@@ -177,7 +177,7 @@ jobs:
     
     - name: Run database migration
       run: |
-        gcloud builds submit --config ./iac/cloudbuild-migrate.yaml --substitutions=_ENVIRONMENT=staging,_IMAGE_TAG=${{ github.sha }}
+        gcloud builds submit --config ./iac/cloudbuild-migrate.yaml --substitutions=_ENVIRONMENT=staging,_IMAGE_TAG=${{ github.sha }},_REGION=${{ env.GCP_REGION }}
     
     - name: Run smoke tests
       run: |
@@ -264,7 +264,7 @@ jobs:
     
     - name: Run database migration
       run: |
-        gcloud builds submit --config ./iac/cloudbuild-migrate.yaml --substitutions=_ENVIRONMENT=production,_IMAGE_TAG=${{ github.sha }}
+        gcloud builds submit --config ./iac/cloudbuild-migrate.yaml --substitutions=_ENVIRONMENT=production,_IMAGE_TAG=${{ github.sha }},_REGION=${{ env.GCP_REGION }}
     
     - name: Run smoke tests
       run: |
