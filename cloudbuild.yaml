@@ -1,0 +1,23 @@
+# Default Cloud Build configuration for automatic triggers
+# This file exists to handle automatic Cloud Build triggers from GCP
+# The actual deployment is handled by GitHub Actions in .github/workflows/deploy.yml
+
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "✅ Automatic Cloud Build trigger acknowledged"
+        echo "🚀 Deployment is handled by GitHub Actions workflow"
+        echo "📝 Check GitHub Actions for actual deployment status"
+        echo "Commit: $SHORT_SHA"
+        echo "Branch: $BRANCH_NAME"
+
+# Options for the build
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_SMALL'
+
+# Short timeout since we're not doing any real work
+timeout: 60s
