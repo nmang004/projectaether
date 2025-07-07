@@ -11,31 +11,32 @@ import hashlib
 import redis
 import structlog
 from typing import Dict, Any, Optional
-from app.config import Settings
+from app.core.config import get_settings
 
 
 # Initialize structured logger
 logger = structlog.get_logger(__name__)
 
 # Initialize settings
-settings = Settings()
+settings = get_settings()
 
 # Initialize Redis client with error handling
 redis_client = None
 
 try:
     # Parse Redis URL and create client
+    redis_url = settings.get_redis_url()
     redis_client = redis.from_url(
-        settings.REDIS_URL,
+        redis_url,
         decode_responses=True,  # Automatically decode bytes to strings
         socket_connect_timeout=5,
         socket_timeout=5
     )
     # Test connection
     redis_client.ping()
-    logger.info("Redis client initialized successfully", redis_url=settings.REDIS_URL)
+    logger.info("Redis client initialized successfully", redis_url=redis_url)
 except redis.ConnectionError as e:
-    logger.error("Failed to connect to Redis", error=str(e), redis_url=settings.REDIS_URL)
+    logger.error("Failed to connect to Redis", error=str(e), redis_url=redis_url)
     redis_client = None
 except Exception as e:
     logger.error("Failed to initialize Redis client", error=str(e))

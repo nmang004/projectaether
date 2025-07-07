@@ -1,58 +1,71 @@
 """
-AI Service for AWS Bedrock integration.
+AI Service for Google Vertex AI integration.
 
-This module provides the sole gateway to AWS Bedrock for Claude model interactions.
-It handles all communication with AWS Bedrock and includes robust error handling
-for credential, region, and API-related issues.
+This module provides the sole gateway to Google Vertex AI for Gemini model interactions.
+It handles all communication with Vertex AI and includes robust error handling
+for authentication, configuration, and API-related issues.
 """
 
 import json
-import boto3
 import structlog
-from typing import Optional
-from botocore.exceptions import ClientError, NoCredentialsError, BotoCoreError
+from typing import Optional, List
+import vertexai
+from vertexai.generative_models import GenerativeModel, GenerationConfig
+from google.api_core import exceptions as google_exceptions
+import os
 
 
 # Initialize structured logger
 logger = structlog.get_logger(__name__)
 
-# Initialize Bedrock client with error handling
-bedrock_client = None
+# Initialize Vertex AI client with error handling
+vertex_model = None
 
 try:
-    # Initialize the bedrock-runtime client
-    bedrock_client = boto3.client(
-        service_name='bedrock-runtime',
-        region_name='us-east-1'  # Default region, can be overridden by AWS_DEFAULT_REGION
-    )
-    logger.info("AWS Bedrock client initialized successfully")
-except NoCredentialsError as e:
-    logger.error("AWS credentials not found", error=str(e))
-    bedrock_client = None
+    # Initialize Vertex AI
+    # The project ID and location can be set via environment variables:
+    # GOOGLE_CLOUD_PROJECT or GCP_PROJECT for project ID
+    # GOOGLE_CLOUD_REGION for location (defaults to us-central1)
+    project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('GCP_PROJECT')
+    location = os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')
+    
+    if project_id:
+        vertexai.init(project=project_id, location=location)
+        
+        # Initialize the Gemini model
+        vertex_model = GenerativeModel("gemini-2.5-pro")
+        logger.info("Google Vertex AI client initialized successfully", 
+                   project=project_id, location=location)
+    else:
+        logger.warning("Google Cloud project ID not found in environment variables")
+        vertex_model = None
+        
 except Exception as e:
-    logger.error("Failed to initialize AWS Bedrock client", error=str(e))
-    bedrock_client = None
+    logger.error("Failed to initialize Google Vertex AI client", error=str(e))
+    vertex_model = None
 
 
-def invoke_claude_model(
+def invoke_gemini_model(
     prompt: str, 
-    model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"
+    model_name: str = "gemini-2.5-pro",
+    response_mime_type: str = "application/json"
 ) -> str:
     """
-    Invoke Claude model via AWS Bedrock.
+    Invoke Gemini model via Google Vertex AI.
     
-    This function constructs the precise JSON payload required by the Bedrock
-    InvokeModel API for Claude 3 models and handles all error scenarios gracefully.
+    This function sends prompts to the Gemini model and handles all error 
+    scenarios gracefully. It's configured to return JSON responses by default.
     
     Args:
-        prompt (str): The prompt to send to the Claude model
-        model_id (str): The Claude model ID to use (defaults to Haiku)
+        prompt (str): The prompt to send to the Gemini model
+        model_name (str): The Gemini model name to use (defaults to gemini-1.5-pro-001)
+        response_mime_type (str): The expected response format (defaults to JSON)
         
     Returns:
         str: The model's response text, or empty string on failure
         
     Raises:
-        RuntimeError: If Bedrock client is not initialized
+        RuntimeError: If Vertex AI client is not initialized
         ValueError: If prompt is empty or None
     """
     # Validate inputs
@@ -61,86 +74,76 @@ def invoke_claude_model(
         raise ValueError("Prompt cannot be empty or None")
     
     # Check if client is initialized
-    if bedrock_client is None:
-        logger.error("Bedrock client is not initialized")
-        raise RuntimeError("AWS Bedrock client is not available")
+    if vertex_model is None:
+        logger.error("Vertex AI model is not initialized")
+        raise RuntimeError("Google Vertex AI client is not available")
     
     try:
-        # Construct the Claude 3 API payload
-        # This follows the exact format required by Bedrock for Claude models
-        payload = {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4000,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
-        
-        # Convert payload to JSON string
-        body = json.dumps(payload)
+        # Configure generation parameters
+        generation_config = GenerationConfig(
+            max_output_tokens=4000,
+            temperature=0.7,
+            response_mime_type=response_mime_type
+        )
         
         logger.info(
-            "Invoking Claude model",
-            model_id=model_id,
+            "Invoking Gemini model",
+            model_name=model_name,
             prompt_length=len(prompt)
         )
         
-        # Make the API call to Bedrock
-        response = bedrock_client.invoke_model(
-            body=body,
-            modelId=model_id,
-            accept="application/json",
-            contentType="application/json"
+        # Generate content using the model
+        response = vertex_model.generate_content(
+            prompt,
+            generation_config=generation_config
         )
         
-        # Parse the response
-        response_body = json.loads(response.get('body').read())
-        
-        # Extract the content from Claude's response
-        # Claude 3 API returns content in a specific format
-        if 'content' in response_body and len(response_body['content']) > 0:
-            content = response_body['content'][0].get('text', '')
+        # Extract the text from the response
+        if response and response.text:
+            content = response.text
             logger.info(
-                "Claude model invocation successful",
-                model_id=model_id,
+                "Gemini model invocation successful",
+                model_name=model_name,
                 response_length=len(content)
             )
             return content
         else:
-            logger.warning("No content in Claude response", response_body=response_body)
+            logger.warning("No content in Gemini response")
             return ""
             
-    except ClientError as e:
-        # Handle specific AWS API errors
-        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
-        error_message = e.response.get('Error', {}).get('Message', str(e))
-        
+    except google_exceptions.InvalidArgument as e:
+        # Handle invalid argument errors
         logger.error(
-            "AWS Bedrock API error",
-            error_code=error_code,
-            error_message=error_message,
-            model_id=model_id
+            "Invalid argument error",
+            error=str(e),
+            model_name=model_name
         )
         return ""
         
-    except BotoCoreError as e:
-        # Handle boto3 core errors (network, timeout, etc.)
+    except google_exceptions.ResourceExhausted as e:
+        # Handle quota exceeded errors
         logger.error(
-            "Boto3 core error during model invocation",
+            "Resource exhausted (quota exceeded)",
             error=str(e),
-            model_id=model_id
+            model_name=model_name
         )
         return ""
         
-    except json.JSONDecodeError as e:
-        # Handle JSON parsing errors
+    except google_exceptions.PermissionDenied as e:
+        # Handle permission errors
         logger.error(
-            "Failed to parse response JSON",
+            "Permission denied error",
             error=str(e),
-            model_id=model_id
+            model_name=model_name
+        )
+        return ""
+        
+    except google_exceptions.GoogleAPIError as e:
+        # Handle general Google API errors
+        logger.error(
+            "Google API error during model invocation",
+            error=str(e),
+            model_name=model_name
         )
         return ""
         
@@ -149,39 +152,38 @@ def invoke_claude_model(
         logger.error(
             "Unexpected error during model invocation",
             error=str(e),
-            model_id=model_id
+            model_name=model_name
         )
         return ""
 
 
-def get_available_models() -> list:
+def get_available_models() -> List[str]:
     """
-    Get list of available Claude models from AWS Bedrock.
+    Get list of available Gemini models from Google Vertex AI.
     
     Returns:
-        list: List of available Claude model IDs
+        list: List of available Gemini model names
     """
-    # Common Claude 3 model IDs available on Bedrock
-    claude_models = [
-        "anthropic.claude-3-haiku-20240307-v1:0",
-        "anthropic.claude-3-sonnet-20240229-v1:0",
-        "anthropic.claude-3-opus-20240229-v1:0"
+    # Common Gemini models available on Vertex AI
+    gemini_models = [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.0-pro"
     ]
     
-    if bedrock_client is None:
-        logger.warning("Bedrock client not available, returning default models")
-        return claude_models
+    if vertex_model is None:
+        logger.warning("Vertex AI client not available, returning default models")
+        return gemini_models
     
     try:
-        # In a production environment, you might want to dynamically fetch
-        # available models using bedrock_client.list_foundation_models()
-        # For now, we return the known Claude models
-        logger.info("Returning available Claude models", count=len(claude_models))
-        return claude_models
+        # For now, we return the known Gemini models
+        # In production, you might want to dynamically fetch available models
+        logger.info("Returning available Gemini models", count=len(gemini_models))
+        return gemini_models
         
     except Exception as e:
         logger.error("Failed to get available models", error=str(e))
-        return claude_models
+        return gemini_models
 
 
 def is_service_available() -> bool:
@@ -191,4 +193,23 @@ def is_service_available() -> bool:
     Returns:
         bool: True if service is available, False otherwise
     """
-    return bedrock_client is not None
+    return vertex_model is not None
+
+
+# For backward compatibility, maintain the same function name
+# This allows the rest of the codebase to work without changes
+def invoke_claude_model(prompt: str, model_id: str = None) -> str:
+    """
+    Backward compatibility wrapper for invoke_gemini_model.
+    
+    This function maintains the same interface as the old AWS Bedrock integration
+    to minimize changes needed in the rest of the codebase.
+    
+    Args:
+        prompt (str): The prompt to send to the model
+        model_id (str): Ignored, uses default Gemini model
+        
+    Returns:
+        str: The model's response text, or empty string on failure
+    """
+    return invoke_gemini_model(prompt, response_mime_type="application/json")

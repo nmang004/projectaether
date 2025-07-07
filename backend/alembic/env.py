@@ -34,7 +34,19 @@ target_metadata = Base.metadata
 
 def get_database_url():
     """Get database URL from environment variable or config file"""
-    return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    # Try to get from environment first
+    env_url = os.getenv("DATABASE_URL")
+    if env_url:
+        return env_url
+    
+    # Import settings to get dynamic URL construction
+    try:
+        from app.core.config import get_settings
+        settings = get_settings()
+        return settings.get_database_url()
+    except ImportError:
+        # Fallback to alembic config if app is not available
+        return config.get_main_option("sqlalchemy.url")
 
 
 def run_migrations_offline() -> None:

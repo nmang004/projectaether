@@ -1,3 +1,8 @@
+# =============================================================================
+# Docker Compose Configuration for Project Aether
+# Development environment with hot reload and debugging enabled
+# =============================================================================
+
 version: '3.8'
 
 services:
@@ -32,9 +37,19 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Development environment variables (override in production)
       - DATABASE_URL=postgresql://aether_user:aether_pass@db:5432/projectaether
       - REDIS_URL=redis://redis:6379
       - ENVIRONMENT=development
+      
+      # Google Cloud configuration (for production deployment)
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - CLOUD_SQL_CONNECTION_NAME=${CLOUD_SQL_CONNECTION_NAME:-}
+      - MEMORYSTORE_IP=${MEMORYSTORE_IP:-}
+      - DATABASE_USER=${DATABASE_USER:-aether_user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-aether_pass}
+      - DATABASE_NAME=${DATABASE_NAME:-projectaether}
     depends_on:
       db:
         condition: service_healthy
@@ -42,7 +57,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -52,9 +67,19 @@ services:
   worker:
     build: ./backend
     environment:
+      # Development environment variables (override in production)
       - DATABASE_URL=postgresql://aether_user:aether_pass@db:5432/projectaether
       - REDIS_URL=redis://redis:6379
       - ENVIRONMENT=development
+      
+      # Google Cloud configuration (for production deployment)
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - CLOUD_SQL_CONNECTION_NAME=${CLOUD_SQL_CONNECTION_NAME:-}
+      - MEMORYSTORE_IP=${MEMORYSTORE_IP:-}
+      - DATABASE_USER=${DATABASE_USER:-aether_user}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-aether_pass}
+      - DATABASE_NAME=${DATABASE_NAME:-projectaether}
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +87,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: celery -A tasks worker --loglevel=info --concurrency=2
+    command: celery -A app.tasks worker --loglevel=info --concurrency=2
 
   frontend:
     build: ./frontend

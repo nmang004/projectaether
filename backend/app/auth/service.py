@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Dict, Any, Optional
 
-import boto3
-from botocore.exceptions import ClientError
+from google.cloud import secretmanager
+from google.cloud.exceptions import GoogleCloudError, NotFound
 from jose import jwt
 from passlib.context import CryptContext
 
@@ -76,9 +76,9 @@ def get_password_hash(password: str) -> str:
 @lru_cache(maxsize=1)
 def get_jwt_secret() -> str:
     """
-    Retrieve JWT secret key from AWS Secrets Manager.
+    Retrieve JWT secret key from Google Secret Manager.
     
-    This function fetches the JWT signing secret from AWS Secrets Manager
+    This function fetches the JWT signing secret from Google Secret Manager
     and caches it for the lifetime of the application. The secret is used
     to sign and verify JWT tokens.
     
@@ -86,52 +86,56 @@ def get_jwt_secret() -> str:
         str: The JWT secret key
         
     Raises:
-        ClientError: If the secret cannot be retrieved from AWS Secrets Manager
+        GoogleCloudError: If the secret cannot be retrieved from Google Secret Manager
         KeyError: If the secret value is not found in the expected format
         
     Security Notes:
         - Secret is cached in memory for performance (single application instance)
-        - Uses AWS IAM permissions for access control
+        - Uses Google Cloud IAM permissions for access control
         - Secret rotation requires application restart (acceptable for this phase)
         - Secret name follows project naming convention for organization
     """
-    # Initialize AWS Secrets Manager client
-    # Uses default credential chain (IAM role, environment variables, etc.)
-    secrets_client = boto3.client('secretsmanager')
+    # Import config to get project ID
+    from app.core.config import get_settings
+    settings = get_settings()
     
-    secret_name = "projectaether/jwt_secret"
+    # Initialize Google Secret Manager client
+    # Uses Application Default Credentials (ADC)
+    client = secretmanager.SecretManagerServiceClient()
+    
+    # Construct the secret name
+    # Format: projects/{project}/secrets/{secret_id}/versions/latest
+    project_id = settings.GCP_PROJECT_ID
+    secret_id = "projectaether-jwt-secret"
+    secret_name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
     
     try:
-        # Retrieve the secret from AWS Secrets Manager
-        response = secrets_client.get_secret_value(SecretId=secret_name)
+        # Access the secret version
+        response = client.access_secret_version(request={"name": secret_name})
+        
+        # Decode the secret payload
+        secret_value = response.payload.data.decode("UTF-8")
         
         # Parse the secret value (assuming JSON format)
-        secret_dict = json.loads(response['SecretString'])
+        secret_dict = json.loads(secret_value)
         
         # Extract the JWT secret key
         return secret_dict['jwt_secret']
         
-    except ClientError as e:
-        # Log the error and re-raise for proper error handling
-        error_code = e.response['Error']['Code']
-        if error_code == 'ResourceNotFoundException':
-            raise ClientError(
-                f"Secret {secret_name} not found in AWS Secrets Manager. "
-                "Please ensure the secret exists and the application has proper IAM permissions."
-            ) from e
-        elif error_code == 'DecryptionFailureException':
-            raise ClientError(
-                f"Failed to decrypt secret {secret_name}. "
-                "Please check AWS KMS permissions."
-            ) from e
-        else:
-            raise ClientError(
-                f"Failed to retrieve secret {secret_name}: {e}"
-            ) from e
+    except NotFound as e:
+        raise GoogleCloudError(
+            f"Secret {secret_id} not found in Google Secret Manager. "
+            "Please ensure the secret exists and the application has proper IAM permissions."
+        ) from e
+    
+    except GoogleCloudError as e:
+        raise GoogleCloudError(
+            f"Failed to retrieve secret {secret_id}: {e}"
+        ) from e
     
     except (KeyError, json.JSONDecodeError) as e:
         raise KeyError(
-            f"Secret {secret_name} does not contain expected 'jwt_secret' key "
+            f"Secret {secret_id} does not contain expected 'jwt_secret' key "
             "or is not valid JSON format."
         ) from e
 

@@ -13,16 +13,43 @@
 This checklist ensures a safe, repeatable, and zero-downtime production deployment of Project Aether using Blue/Green deployment strategy. As a solo deployer, you will be responsible for all roles and verification steps.
 
 ### Key Information
-- **Production URL:** https://app.project-aether.io
-- **Monitoring Dashboard:** https://console.aws.amazon.com/cloudwatch/dashboards/project-aether-prod
+- **Production URL:** [TO BE CONFIGURED] - Domain needs to be set up
+- **Monitoring Dashboard:** AWS CloudWatch (will be available after infrastructure deployment)
 - **GitHub Repository:** https://github.com/[YOUR-USERNAME]/projectaether
 - **Deployment Strategy:** Blue/Green via GitHub Actions "Deploy to Prod" workflow
+- **Infrastructure:** AWS CDK stack in `/iac` directory
 
 ### Solo Deployment Notes
-- **Estimated Total Time:** 3-4 hours
+- **Estimated Total Time:** 3-4 hours (after infrastructure setup)
 - **Required Tools:** Web browser, AWS CLI, GitHub access, text editor
-- **Prerequisites:** Staging environment tested, all code merged to main
+- **Prerequisites:** Infrastructure deployed, domain configured, staging tested
 - **Backup Plan:** Rollback procedures documented and tested
+
+### IMPORTANT: Prerequisites Before Using This Checklist
+**This checklist assumes your production infrastructure is already deployed. If this is your first deployment, you must complete these steps first:**
+
+1. **Deploy AWS Infrastructure:**
+   ```bash
+   cd iac
+   npm install
+   cdk bootstrap
+   cdk deploy
+   ```
+
+2. **Configure Production Domain:**
+   - Purchase/configure domain `app.project-aether.io`
+   - Set up DNS pointing to your AWS load balancer
+   - Configure SSL certificate
+
+3. **Set Up Production Secrets:**
+   - Configure AWS Parameter Store with production environment variables
+   - Set up database credentials in AWS Secrets Manager
+
+4. **Test GitHub Actions Workflow:**
+   - Ensure "Deploy to Prod" workflow exists and is functional
+   - Test deployment to staging environment first
+
+**Only proceed with this checklist after infrastructure is deployed and accessible.**
 
 ---
 

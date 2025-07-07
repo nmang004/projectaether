@@ -1,4 +1,4 @@
-name: Deploy to AWS
+name: Deploy to Google Cloud Platform
 
 on:
   push:
@@ -15,8 +15,8 @@ on:
           - production
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  GCP_REGION: us-central1
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 
 jobs:
   build:
@@ -32,19 +32,31 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
     
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+    
+    - name: Set environment for image builds
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+          echo "ENV_NAME=staging" >> $GITHUB_ENV
+        elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          echo "ENV_NAME=production" >> $GITHUB_ENV
+        else
+          echo "ENV_NAME=dev" >> $GITHUB_ENV
+        fi
+        echo "ARTIFACT_REGISTRY=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/project-aether-${ENV_NAME}-docker-repo" >> $GITHUB_ENV
     
     - name: Build and push API image
       id: build-api
@@ -53,8 +65,8 @@ jobs:
         context: ./backend
         push: true
         tags: |
-          ${{ env.ECR_REGISTRY }}/project-aether-api:latest
-          ${{ env.ECR_REGISTRY }}/project-aether-api:${{ github.sha }}
+          ${{ env.ARTIFACT_REGISTRY }}/project-aether-api:latest
+          ${{ env.ARTIFACT_REGISTRY }}/project-aether-api:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
@@ -65,8 +77,8 @@ jobs:
         context: ./backend
         push: true
         tags: |
-          ${{ env.ECR_REGISTRY }}/project-aether-worker:latest
-          ${{ env.ECR_REGISTRY }}/project-aether-worker:${{ github.sha }}
+          ${{ env.ARTIFACT_REGISTRY }}/project-aether-worker:latest
+          ${{ env.ARTIFACT_REGISTRY }}/project-aether-worker:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
@@ -77,16 +89,16 @@ jobs:
         context: ./frontend
         push: true
         tags: |
-          ${{ env.ECR_REGISTRY }}/project-aether-frontend:latest
-          ${{ env.ECR_REGISTRY }}/project-aether-frontend:${{ github.sha }}
+          ${{ env.ARTIFACT_REGISTRY }}/project-aether-frontend:latest
+          ${{ env.ARTIFACT_REGISTRY }}/project-aether-frontend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
     - name: Set image outputs
       run: |
-        echo "image=${{ env.ECR_REGISTRY }}/project-aether-api:${{ github.sha }}" >> $GITHUB_OUTPUT
-        echo "image=${{ env.ECR_REGISTRY }}/project-aether-worker:${{ github.sha }}" >> $GITHUB_OUTPUT
-        echo "image=${{ env.ECR_REGISTRY }}/project-aether-frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "api-image=${{ env.ARTIFACT_REGISTRY }}/project-aether-api:${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "worker-image=${{ env.ARTIFACT_REGISTRY }}/project-aether-worker:${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "frontend-image=${{ env.ARTIFACT_REGISTRY }}/project-aether-frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
 
   deploy-staging:
     name: Deploy to Staging
@@ -99,50 +111,81 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
     
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: iac/package-lock.json
-    
-    - name: Install CDK dependencies
-      working-directory: ./iac
-      run: npm ci
+        terraform_version: 1.0.0
     
     - name: Deploy infrastructure
-      working-directory: ./iac
+      working-directory: ./iac/terraform
       run: |
-        npm run build
-        npx cdk deploy --require-approval never --context environment=staging
+        terraform init
+        terraform plan -var="project_id=${{ env.GCP_PROJECT_ID }}" -var="environment=staging"
+        terraform apply -auto-approve -var="project_id=${{ env.GCP_PROJECT_ID }}" -var="environment=staging"
     
-    - name: Update ECS service
-      run: |
-        aws ecs update-service \
-          --cluster project-aether-cluster \
-          --service project-aether-worker-service \
-          --force-new-deployment \
-          --region ${{ env.AWS_REGION }}
+    - name: Deploy API to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: project-aether-staging-api
+        image: ${{ needs.build.outputs.api-image }}
+        region: ${{ env.GCP_REGION }}
+        env_vars: |
+          ENVIRONMENT=staging
+          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCP_REGION=${{ env.GCP_REGION }}
+        flags: |
+          --vpc-connector=project-aether-staging-vpc-connector
+          --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:project-aether-staging-postgres
+          --service-account=project-aether-staging-api-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          --allow-unauthenticated
     
-    - name: Wait for deployment
+    - name: Deploy Frontend to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: project-aether-staging-frontend
+        image: ${{ needs.build.outputs.frontend-image }}
+        region: ${{ env.GCP_REGION }}
+        flags: |
+          --allow-unauthenticated
+          --port=80
+    
+    - name: Deploy Worker to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: project-aether-staging-worker
+        image: ${{ needs.build.outputs.worker-image }}
+        region: ${{ env.GCP_REGION }}
+        env_vars: |
+          ENVIRONMENT=staging
+          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCP_REGION=${{ env.GCP_REGION }}
+        flags: |
+          --vpc-connector=project-aether-staging-vpc-connector
+          --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:project-aether-staging-postgres
+          --service-account=project-aether-staging-worker-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          --no-traffic
+          --min-instances=0
+          --max-instances=10
+    
+    - name: Run database migration
       run: |
-        aws ecs wait services-stable \
-          --cluster project-aether-cluster \
-          --services project-aether-worker-service \
-          --region ${{ env.AWS_REGION }}
+        gcloud builds submit --config ./iac/cloudbuild-migrate.yaml --substitutions=_ENVIRONMENT=staging,_IMAGE_TAG=${{ github.sha }}
     
     - name: Run smoke tests
       run: |
         echo "Running smoke tests against staging environment..."
-        # Add your smoke test commands here
-        # curl -f https://staging-api.projectaether.com/health
+        sleep 30  # Wait for services to be ready
+        API_URL=$(gcloud run services describe project-aether-staging-api --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        curl -f "$API_URL/health" || exit 1
+        echo "✅ Staging deployment successful!"
 
   deploy-production:
     name: Deploy to Production
@@ -155,50 +198,81 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
     
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v3
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: iac/package-lock.json
-    
-    - name: Install CDK dependencies
-      working-directory: ./iac
-      run: npm ci
+        terraform_version: 1.0.0
     
     - name: Deploy infrastructure
-      working-directory: ./iac
+      working-directory: ./iac/terraform
       run: |
-        npm run build
-        npx cdk deploy --require-approval never --context environment=production
+        terraform init
+        terraform plan -var="project_id=${{ env.GCP_PROJECT_ID }}" -var="environment=production"
+        terraform apply -auto-approve -var="project_id=${{ env.GCP_PROJECT_ID }}" -var="environment=production"
     
-    - name: Update ECS service
-      run: |
-        aws ecs update-service \
-          --cluster project-aether-cluster \
-          --service project-aether-worker-service \
-          --force-new-deployment \
-          --region ${{ env.AWS_REGION }}
+    - name: Deploy API to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: project-aether-production-api
+        image: ${{ needs.build.outputs.api-image }}
+        region: ${{ env.GCP_REGION }}
+        env_vars: |
+          ENVIRONMENT=production
+          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCP_REGION=${{ env.GCP_REGION }}
+        flags: |
+          --vpc-connector=project-aether-production-vpc-connector
+          --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:project-aether-production-postgres
+          --service-account=project-aether-production-api-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          --allow-unauthenticated
     
-    - name: Wait for deployment
+    - name: Deploy Frontend to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: project-aether-production-frontend
+        image: ${{ needs.build.outputs.frontend-image }}
+        region: ${{ env.GCP_REGION }}
+        flags: |
+          --allow-unauthenticated
+          --port=80
+    
+    - name: Deploy Worker to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: project-aether-production-worker
+        image: ${{ needs.build.outputs.worker-image }}
+        region: ${{ env.GCP_REGION }}
+        env_vars: |
+          ENVIRONMENT=production
+          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCP_REGION=${{ env.GCP_REGION }}
+        flags: |
+          --vpc-connector=project-aether-production-vpc-connector
+          --add-cloudsql-instances=${{ env.GCP_PROJECT_ID }}:${{ env.GCP_REGION }}:project-aether-production-postgres
+          --service-account=project-aether-production-worker-sa@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          --no-traffic
+          --min-instances=0
+          --max-instances=20
+    
+    - name: Run database migration
       run: |
-        aws ecs wait services-stable \
-          --cluster project-aether-cluster \
-          --services project-aether-worker-service \
-          --region ${{ env.AWS_REGION }}
+        gcloud builds submit --config ./iac/cloudbuild-migrate.yaml --substitutions=_ENVIRONMENT=production,_IMAGE_TAG=${{ github.sha }}
     
     - name: Run smoke tests
       run: |
         echo "Running smoke tests against production environment..."
-        # Add your smoke test commands here
-        # curl -f https://api.projectaether.com/health
+        sleep 30  # Wait for services to be ready
+        API_URL=$(gcloud run services describe project-aether-production-api --region=${{ env.GCP_REGION }} --format="value(status.url)")
+        curl -f "$API_URL/health" || exit 1
+        echo "✅ Production deployment successful!"
     
     - name: Create GitHub release
       uses: softprops/action-gh-release@v1

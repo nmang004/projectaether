@@ -17,13 +17,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import Settings
+from app.core.config import get_settings
 from app.auth.router import router as auth_router
 from app.api.v1.api import api_router
 
 
 # Initialize settings - single source of truth for configuration
-settings = Settings()
+settings = get_settings()
 
 
 def configure_logging() -> None:
@@ -44,8 +44,6 @@ def configure_logging() -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             # Add log level to entries
             structlog.processors.add_log_level,
-            # Add logger name to entries
-            structlog.processors.add_logger_name,
             # Convert to JSON format for structured logging
             structlog.processors.JSONRenderer()
         ],

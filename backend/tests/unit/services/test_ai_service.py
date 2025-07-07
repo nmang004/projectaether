@@ -2,197 +2,198 @@
 Unit tests for the AI service module.
 
 This module tests the AI service functions in isolation, mocking all external
-dependencies including boto3 calls. These tests ensure the business logic
-works correctly without actually calling AWS Bedrock.
+dependencies including Vertex AI calls. These tests ensure the business logic
+works correctly without actually calling Google Vertex AI.
 """
 
 import json
 import pytest
-from unittest.mock import MagicMock, patch
-from botocore.exceptions import ClientError, NoCredentialsError, BotoCoreError
+from unittest.mock import MagicMock, patch, Mock
+from google.api_core import exceptions as google_exceptions
 
 from app.services import ai_service
 
 
-class TestInvokeClaudeModel:
-    """Test cases for the invoke_claude_model function."""
+class TestInvokeGeminiModel:
+    """Test cases for the invoke_gemini_model function."""
 
-    def test_invoke_claude_model_success(self, mocker):
-        """Test successful Claude model invocation."""
-        # Mock the boto3 client
-        mock_bedrock_client = MagicMock()
-        mock_response = {
-            'body': MagicMock()
-        }
-        mock_response_body = {
-            'content': [
-                {
-                    'text': 'This is a test response from Claude'
-                }
-            ]
-        }
-        mock_response['body'].read.return_value = json.dumps(mock_response_body).encode()
-        mock_bedrock_client.invoke_model.return_value = mock_response
+    def test_invoke_gemini_model_success(self, mocker):
+        """Test successful Gemini model invocation."""
+        # Mock the vertex model
+        mock_vertex_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = 'This is a test response from Gemini'
+        mock_vertex_model.generate_content.return_value = mock_response
         
-        # Patch the bedrock_client in ai_service
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        # Patch the vertex_model in ai_service
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Test parameters
         test_prompt = "What is the capital of France?"
-        test_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        test_model_name = "gemini-2.5-pro"
         
         # Call the function
-        result = ai_service.invoke_claude_model(test_prompt, test_model_id)
+        result = ai_service.invoke_gemini_model(test_prompt, test_model_name)
         
         # Verify the result
-        assert result == 'This is a test response from Claude'
+        assert result == 'This is a test response from Gemini'
         
-        # Verify the boto3 call was made with correct parameters
-        mock_bedrock_client.invoke_model.assert_called_once()
-        call_args = mock_bedrock_client.invoke_model.call_args
+        # Verify the Vertex AI call was made
+        mock_vertex_model.generate_content.assert_called_once()
+        call_args = mock_vertex_model.generate_content.call_args
         
-        # Check the call arguments
-        assert call_args[1]['modelId'] == test_model_id
-        assert call_args[1]['accept'] == 'application/json'
-        assert call_args[1]['contentType'] == 'application/json'
-        
-        # Check the payload structure
-        body = json.loads(call_args[1]['body'])
-        assert body['anthropic_version'] == 'bedrock-2023-05-31'
-        assert body['max_tokens'] == 4000
-        assert len(body['messages']) == 1
-        assert body['messages'][0]['role'] == 'user'
-        assert body['messages'][0]['content'] == test_prompt
+        # Check the prompt was passed correctly
+        assert call_args[0][0] == test_prompt
 
-    def test_invoke_claude_model_empty_prompt(self, mocker):
+    def test_invoke_gemini_model_empty_prompt(self, mocker):
         """Test error handling for empty prompt."""
-        # Mock the bedrock_client
-        mock_bedrock_client = MagicMock()
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        # Mock the vertex_model
+        mock_vertex_model = MagicMock()
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Test with empty prompt
         with pytest.raises(ValueError, match="Prompt cannot be empty or None"):
-            ai_service.invoke_claude_model("")
+            ai_service.invoke_gemini_model("")
             
         # Test with None prompt
         with pytest.raises(ValueError, match="Prompt cannot be empty or None"):
-            ai_service.invoke_claude_model(None)
+            ai_service.invoke_gemini_model(None)
             
         # Test with whitespace-only prompt
         with pytest.raises(ValueError, match="Prompt cannot be empty or None"):
-            ai_service.invoke_claude_model("   ")
+            ai_service.invoke_gemini_model("   ")
 
-    def test_invoke_claude_model_no_client(self, mocker):
-        """Test error handling when bedrock client is not available."""
-        # Mock bedrock_client as None
-        mocker.patch.object(ai_service, 'bedrock_client', None)
+    def test_invoke_gemini_model_no_client(self, mocker):
+        """Test error handling when vertex model is not available."""
+        # Mock vertex_model as None
+        mocker.patch.object(ai_service, 'vertex_model', None)
         
-        with pytest.raises(RuntimeError, match="AWS Bedrock client is not available"):
-            ai_service.invoke_claude_model("test prompt")
+        with pytest.raises(RuntimeError, match="Google Vertex AI client is not available"):
+            ai_service.invoke_gemini_model("test prompt")
 
-    def test_invoke_claude_model_client_error(self, mocker):
-        """Test error handling for AWS client errors."""
-        # Mock the boto3 client to raise ClientError
-        mock_bedrock_client = MagicMock()
-        mock_bedrock_client.invoke_model.side_effect = ClientError(
-            error_response={
-                'Error': {
-                    'Code': 'ValidationException',
-                    'Message': 'Invalid model ID'
-                }
-            },
-            operation_name='InvokeModel'
+    def test_invoke_gemini_model_invalid_argument_error(self, mocker):
+        """Test error handling for Google API invalid argument errors."""
+        # Mock the vertex model to raise InvalidArgument
+        mock_vertex_model = MagicMock()
+        mock_vertex_model.generate_content.side_effect = google_exceptions.InvalidArgument(
+            "Invalid argument"
         )
         
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function and expect empty string return
-        result = ai_service.invoke_claude_model("test prompt")
+        result = ai_service.invoke_gemini_model("test prompt")
         
         # Should return empty string on error
         assert result == ""
 
-    def test_invoke_claude_model_boto_core_error(self, mocker):
-        """Test error handling for boto3 core errors."""
-        # Mock the boto3 client to raise BotoCoreError
-        mock_bedrock_client = MagicMock()
-        mock_bedrock_client.invoke_model.side_effect = BotoCoreError()
+    def test_invoke_gemini_model_resource_exhausted_error(self, mocker):
+        """Test error handling for quota exceeded errors."""
+        # Mock the vertex model to raise ResourceExhausted
+        mock_vertex_model = MagicMock()
+        mock_vertex_model.generate_content.side_effect = google_exceptions.ResourceExhausted(
+            "Quota exceeded"
+        )
         
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function and expect empty string return
-        result = ai_service.invoke_claude_model("test prompt")
+        result = ai_service.invoke_gemini_model("test prompt")
         
         # Should return empty string on error
         assert result == ""
 
-    def test_invoke_claude_model_json_decode_error(self, mocker):
-        """Test error handling for JSON decode errors."""
-        # Mock the boto3 client to return invalid JSON
-        mock_bedrock_client = MagicMock()
-        mock_response = {
-            'body': MagicMock()
-        }
-        mock_response['body'].read.return_value = b'invalid json'
-        mock_bedrock_client.invoke_model.return_value = mock_response
+    def test_invoke_gemini_model_permission_denied_error(self, mocker):
+        """Test error handling for permission denied errors."""
+        # Mock the vertex model to raise PermissionDenied
+        mock_vertex_model = MagicMock()
+        mock_vertex_model.generate_content.side_effect = google_exceptions.PermissionDenied(
+            "Permission denied"
+        )
         
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function and expect empty string return
-        result = ai_service.invoke_claude_model("test prompt")
+        result = ai_service.invoke_gemini_model("test prompt")
         
         # Should return empty string on error
         assert result == ""
 
-    def test_invoke_claude_model_no_content(self, mocker):
+    def test_invoke_gemini_model_general_api_error(self, mocker):
+        """Test error handling for general Google API errors."""
+        # Mock the vertex model to raise GoogleAPIError
+        mock_vertex_model = MagicMock()
+        mock_vertex_model.generate_content.side_effect = google_exceptions.GoogleAPIError(
+            "API Error"
+        )
+        
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
+        
+        # Call the function and expect empty string return
+        result = ai_service.invoke_gemini_model("test prompt")
+        
+        # Should return empty string on error
+        assert result == ""
+
+    def test_invoke_gemini_model_no_content(self, mocker):
         """Test handling of response with no content."""
-        # Mock the boto3 client to return response without content
-        mock_bedrock_client = MagicMock()
-        mock_response = {
-            'body': MagicMock()
-        }
-        mock_response_body = {
-            'content': []  # Empty content array
-        }
-        mock_response['body'].read.return_value = json.dumps(mock_response_body).encode()
-        mock_bedrock_client.invoke_model.return_value = mock_response
+        # Mock the vertex model to return response without text
+        mock_vertex_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = None
+        mock_vertex_model.generate_content.return_value = mock_response
         
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function
-        result = ai_service.invoke_claude_model("test prompt")
+        result = ai_service.invoke_gemini_model("test prompt")
         
         # Should return empty string when no content
         assert result == ""
 
-    def test_invoke_claude_model_default_parameters(self, mocker):
+    def test_invoke_gemini_model_default_parameters(self, mocker):
         """Test that default parameters are used correctly."""
-        # Mock the boto3 client
-        mock_bedrock_client = MagicMock()
-        mock_response = {
-            'body': MagicMock()
-        }
-        mock_response_body = {
-            'content': [
-                {
-                    'text': 'Default model response'
-                }
-            ]
-        }
-        mock_response['body'].read.return_value = json.dumps(mock_response_body).encode()
-        mock_bedrock_client.invoke_model.return_value = mock_response
+        # Mock the vertex model
+        mock_vertex_model = MagicMock()
+        mock_response = MagicMock()
+        mock_response.text = 'Default model response'
+        mock_vertex_model.generate_content.return_value = mock_response
         
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function with only prompt (using defaults)
-        result = ai_service.invoke_claude_model("test prompt")
+        result = ai_service.invoke_gemini_model("test prompt")
         
         # Verify the result
         assert result == 'Default model response'
         
-        # Verify default model ID was used
-        call_args = mock_bedrock_client.invoke_model.call_args
-        assert call_args[1]['modelId'] == "anthropic.claude-3-haiku-20240307-v1:0"
+        # Verify the call was made
+        mock_vertex_model.generate_content.assert_called_once()
+
+
+class TestInvokeClaudeModel:
+    """Test cases for the backward compatibility invoke_claude_model function."""
+
+    def test_invoke_claude_model_compatibility(self, mocker):
+        """Test that invoke_claude_model calls invoke_gemini_model correctly."""
+        # Mock invoke_gemini_model
+        mock_invoke_gemini = mocker.patch.object(
+            ai_service, 
+            'invoke_gemini_model',
+            return_value='Gemini response'
+        )
+        
+        # Call the compatibility function
+        result = ai_service.invoke_claude_model("test prompt", "ignored-model-id")
+        
+        # Verify it called invoke_gemini_model
+        mock_invoke_gemini.assert_called_once_with(
+            "test prompt", 
+            response_mime_type="application/json"
+        )
+        
+        # Verify the result
+        assert result == 'Gemini response'
 
 
 class TestGetAvailableModels:
@@ -200,34 +201,34 @@ class TestGetAvailableModels:
 
     def test_get_available_models_success(self, mocker):
         """Test successful retrieval of available models."""
-        # Mock the bedrock_client
-        mock_bedrock_client = MagicMock()
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        # Mock the vertex_model
+        mock_vertex_model = MagicMock()
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function
         result = ai_service.get_available_models()
         
         # Verify the result contains expected models
         expected_models = [
-            "anthropic.claude-3-haiku-20240307-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0",
-            "anthropic.claude-3-opus-20240229-v1:0"
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.0-pro"
         ]
         assert result == expected_models
 
     def test_get_available_models_no_client(self, mocker):
         """Test get_available_models when client is not available."""
-        # Mock bedrock_client as None
-        mocker.patch.object(ai_service, 'bedrock_client', None)
+        # Mock vertex_model as None
+        mocker.patch.object(ai_service, 'vertex_model', None)
         
         # Call the function
         result = ai_service.get_available_models()
         
         # Should still return default models
         expected_models = [
-            "anthropic.claude-3-haiku-20240307-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0",
-            "anthropic.claude-3-opus-20240229-v1:0"
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.0-pro"
         ]
         assert result == expected_models
 
@@ -237,9 +238,9 @@ class TestIsServiceAvailable:
 
     def test_is_service_available_true(self, mocker):
         """Test service availability when client is available."""
-        # Mock the bedrock_client
-        mock_bedrock_client = MagicMock()
-        mocker.patch.object(ai_service, 'bedrock_client', mock_bedrock_client)
+        # Mock the vertex_model
+        mock_vertex_model = MagicMock()
+        mocker.patch.object(ai_service, 'vertex_model', mock_vertex_model)
         
         # Call the function
         result = ai_service.is_service_available()
@@ -249,8 +250,8 @@ class TestIsServiceAvailable:
 
     def test_is_service_available_false(self, mocker):
         """Test service availability when client is not available."""
-        # Mock bedrock_client as None
-        mocker.patch.object(ai_service, 'bedrock_client', None)
+        # Mock vertex_model as None
+        mocker.patch.object(ai_service, 'vertex_model', None)
         
         # Call the function
         result = ai_service.is_service_available()

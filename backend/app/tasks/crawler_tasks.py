@@ -8,21 +8,21 @@ These tasks are executed by Celery workers and can be triggered via the API laye
 import time
 import structlog
 from celery import Celery
-from app.config import Settings
+from app.core.config import get_settings
 
 
 # Initialize structured logger
 logger = structlog.get_logger(__name__)
 
 # Initialize settings
-settings = Settings()
+settings = get_settings()
 
 # Configure Celery app instance
 # Using Redis as both broker and result backend for simplicity
 celery_app = Celery(
     'project_aether',
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=settings.get_celery_broker_url(),
+    backend=settings.get_celery_result_backend_url(),
     include=['app.tasks.crawler_tasks']
 )
 

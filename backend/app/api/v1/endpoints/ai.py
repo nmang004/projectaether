@@ -197,7 +197,7 @@ async def generate_keyword_clusters(
         return {
             "head_term": payload.head_term,
             "clusters": keyword_clusters,
-            "generated_by": "Claude AI via AWS Bedrock",
+            "generated_by": "Gemini AI via Google Vertex AI",
             "user": current_user
         }
         
@@ -285,7 +285,7 @@ async def generate_schema_markup(
             "schema_type": payload.schema_type,
             "content_length": len(payload.content),
             "schema_markup": schema_markup,
-            "generated_by": "Claude AI via AWS Bedrock",
+            "generated_by": "Gemini AI via Google Vertex AI",
             "user": current_user
         }
         
@@ -370,7 +370,7 @@ async def generate_content_brief(
         return {
             "keyword": payload.keyword,
             "content_brief": content_brief,
-            "generated_by": "Claude AI via AWS Bedrock",
+            "generated_by": "Gemini AI via Google Vertex AI",
             "user": current_user
         }
         
@@ -418,8 +418,8 @@ async def get_ai_service_status(
         return {
             "service_available": is_available,
             "available_models": available_models,
-            "service_provider": "AWS Bedrock",
-            "default_model": "anthropic.claude-3-haiku-20240307-v1:0",
+            "service_provider": "Google Vertex AI",
+            "default_model": "gemini-2.5-pro",
             "prompts_loaded": len(load_prompts()) > 0,
             "user": current_user
         }

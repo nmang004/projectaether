@@ -1,0 +1,119 @@
+# =============================================================================
+# Docker Compose Configuration for Project Aether - Production
+# Optimized for production deployment with security and performance considerations
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-projectaether}
+      POSTGRES_USER: ${DATABASE_USER:-aether_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-aether_pass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-aether_user} -d ${DATABASE_NAME:-projectaether}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # FastAPI Backend
+  api:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # Production environment variables
+      - DATABASE_URL=postgresql://${DATABASE_USER:-aether_user}:${DATABASE_PASSWORD:-aether_pass}@db:5432/${DATABASE_NAME:-projectaether}
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=production
+      
+      # Google Cloud configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - CLOUD_SQL_CONNECTION_NAME=${CLOUD_SQL_CONNECTION_NAME}
+      - MEMORYSTORE_IP=${MEMORYSTORE_IP}
+      
+      # Security settings
+      - SECRET_KEY=${SECRET_KEY}
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:3000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Celery Worker
+  worker:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      # Production environment variables
+      - DATABASE_URL=postgresql://${DATABASE_USER:-aether_user}:${DATABASE_PASSWORD:-aether_pass}@db:5432/${DATABASE_NAME:-projectaether}
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=production
+      
+      # Google Cloud configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - CLOUD_SQL_CONNECTION_NAME=${CLOUD_SQL_CONNECTION_NAME}
+      - MEMORYSTORE_IP=${MEMORYSTORE_IP}
+      
+      # Security settings
+      - SECRET_KEY=${SECRET_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.tasks worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: projectaether_prod
+    driver: bridge
