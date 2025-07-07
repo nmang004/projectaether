@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { apiClient } from '@/services/api'
+import { apiClient } from '@/lib/apiClient'
 
 function HomePage() {
   const { data: apiHealth, isLoading } = useQuery({
