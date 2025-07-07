@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { PageHeader } from "@/components/layout/PageHeader"
 import { BarChart } from "@/components/charts/BarChart"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 export default function DashboardPage() {
   const [keywords, setKeywords] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [clusters, setClusters] = useState([]);
+  const [clusters, setClusters] = useState<Array<{id: number; primaryKeyword: string; relatedKeywords: string[]}>>([]);
   const { logout } = useAuthStore();
 
   const performanceData = [
